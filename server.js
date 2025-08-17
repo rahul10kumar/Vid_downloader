@@ -1,13 +1,16 @@
 const express = require('express');
 const ytdl = require('ytdl-core');
-const path = require('path');
-const fs = require('fs');
+const cors = require('cors'); // <-- import cors
 
 const app = express();
 app.use(express.json());
+app.use(cors()); // <-- allow all origins
 app.use(express.static('public'));
 
 const PORT = process.env.PORT || 10000;
+
+// ... rest of your code
+
 
 // Endpoint to get video info
 app.post('/getVideo', async (req, res) => {
