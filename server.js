@@ -3,7 +3,7 @@ const fetch = require('node-fetch');
 const cors = require('cors');
 
 const app = express();
-app.use(cors());
+app.use(cors()); // allow all origins; for production, restrict to your domain
 app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
@@ -14,14 +14,19 @@ app.post('/getVideo', async (req, res) => {
   if (!url) return res.status(400).json({ error: 'No URL provided' });
 
   try {
-    const videoId = url.split('v=')[1]?.split('&')[0];
-    if (!videoId) return res.status(400).json({ error: 'Invalid YouTube URL' });
+    // Extract video ID
+    const videoIdMatch = url.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+    if (!videoIdMatch) return res.status(400).json({ error: 'Invalid YouTube URL' });
+
+    const videoId = videoIdMatch[1];
 
     // Fetch YouTube watch page
     const response = await fetch(`https://www.youtube.com/watch?v=${videoId}`);
+    if (!response.ok) return res.status(500).json({ error: 'Failed to fetch YouTube page' });
+
     const html = await response.text();
 
-    // Extract player response JSON from HTML
+    // Extract player response JSON
     const match = html.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\});/s);
     if (!match) return res.status(500).json({ error: 'Could not parse video info' });
 
@@ -31,12 +36,15 @@ app.post('/getVideo', async (req, res) => {
 
     if (!streamingData) return res.status(500).json({ error: 'Streaming data not found' });
 
-    const formats = streamingData.formats?.map(f => ({
+    const formats = [
+      ...(streamingData.formats || []),
+      ...(streamingData.adaptiveFormats || [])
+    ].map(f => ({
       itag: f.itag,
       quality: f.qualityLabel || f.quality,
       mimeType: f.mimeType,
-      url: f.url
-    })) || [];
+      url: f.url || null
+    })).filter(f => f.url); // remove any formats without direct URL
 
     res.json({
       title: videoDetails.title,
@@ -45,7 +53,7 @@ app.post('/getVideo', async (req, res) => {
     });
 
   } catch (err) {
-    console.error(err);
+    console.error('Error in /getVideo:', err);
     res.status(500).json({ error: 'Failed to fetch video info' });
   }
 });
@@ -57,10 +65,17 @@ app.get('/stream', async (req, res) => {
 
   try {
     const response = await fetch(url);
+    if (!response.ok) return res.status(500).send('Failed to fetch video stream');
+
+    // Set headers to allow browser to download/play
     res.setHeader('Content-Type', response.headers.get('content-type'));
+    res.setHeader('Content-Length', response.headers.get('content-length'));
+
+    // Pipe the stream to client
     response.body.pipe(res);
+
   } catch (err) {
-    console.error(err);
+    console.error('Error in /stream:', err);
     res.status(500).send('Failed to stream video');
   }
 });
