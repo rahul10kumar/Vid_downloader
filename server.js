@@ -5,6 +5,8 @@ const fs = require("fs");
 // Paths to binaries
 const ytDlpPath = path.join(__dirname, "yt-dlp");
 const ffmpegPath = path.join(__dirname, "ffmpeg");
+const cookiesPath = path.join(__dirname, "cookies.txt"); // must match uploaded file
+
 
 // Output folder
 const downloadDir = path.join(__dirname, "downloads");
@@ -17,7 +19,7 @@ const url = "https://www.youtube.com/watch?v=zrtQb4IIY6Y";
 const outputPath = path.join(downloadDir, "%(title)s.%(ext)s");
 
 // yt-dlp command
-const command = `"${ytDlpPath}" -f "bv*+ba/best" --merge-output-format mp4 --ffmpeg-location "${ffmpegPath}" -o "${outputPath}" "${url}"`;
+const command = `"${ytDlpPath}" --cookies "${cookiesPath}" -f "bv*+ba/best" --merge-output-format mp4 --ffmpeg-location "${ffmpegPath}" -o "${outputPath}" "${url}"`;
 
 console.log("📥 Downloading:", url);
 
