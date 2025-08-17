@@ -1,82 +1,39 @@
 const express = require('express');
-const fetch = require('node-fetch');
+const fetch = require('node-fetch'); // use node 18+ built-in fetch if available
 const cors = require('cors');
 
 const app = express();
-app.use(cors()); // allow all origins; for production, restrict to your domain
+app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
 
-// Endpoint to get YouTube video info (player page)
+// Example endpoint
 app.post('/getVideo', async (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'No URL provided' });
 
   try {
-    // Extract video ID
-    const videoIdMatch = url.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-    if (!videoIdMatch) return res.status(400).json({ error: 'Invalid YouTube URL' });
+    // Here, you would normally call yt-dlp or a third-party API to get the real download URL
+    // Example: Using RapidAPI just to get the direct link
+    const apiRes = await fetch(`https://youtube-mp36.p.rapidapi.com/dl?id=${encodeURIComponent(url)}`, {
+      headers: {
+        'X-RapidAPI-Key': 'YOUR_API_KEY',
+        'X-RapidAPI-Host': 'youtube-mp36.p.rapidapi.com'
+      }
+    });
 
-    const videoId = videoIdMatch[1];
-
-    // Fetch YouTube watch page
-    const response = await fetch(`https://www.youtube.com/watch?v=${videoId}`);
-    if (!response.ok) return res.status(500).json({ error: 'Failed to fetch YouTube page' });
-
-    const html = await response.text();
-
-    // Extract player response JSON
-    const match = html.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\});/s);
-    if (!match) return res.status(500).json({ error: 'Could not parse video info' });
-
-    const playerResponse = JSON.parse(match[1]);
-    const videoDetails = playerResponse.videoDetails;
-    const streamingData = playerResponse.streamingData;
-
-    if (!streamingData) return res.status(500).json({ error: 'Streaming data not found' });
-
-    const formats = [
-      ...(streamingData.formats || []),
-      ...(streamingData.adaptiveFormats || [])
-    ].map(f => ({
-      itag: f.itag,
-      quality: f.qualityLabel || f.quality,
-      mimeType: f.mimeType,
-      url: f.url || null
-    })).filter(f => f.url); // remove any formats without direct URL
+    const data = await apiRes.json();
+    if (!data.link) return res.status(500).json({ error: 'Could not get download link' });
 
     res.json({
-      title: videoDetails.title,
-      author: videoDetails.author,
-      formats
+      title: data.title,
+      link: data.link
     });
 
   } catch (err) {
-    console.error('Error in /getVideo:', err);
+    console.error(err);
     res.status(500).json({ error: 'Failed to fetch video info' });
-  }
-});
-
-// Stream video via proxy
-app.get('/stream', async (req, res) => {
-  const { url } = req.query;
-  if (!url) return res.status(400).send('No URL provided');
-
-  try {
-    const response = await fetch(url);
-    if (!response.ok) return res.status(500).send('Failed to fetch video stream');
-
-    // Set headers to allow browser to download/play
-    res.setHeader('Content-Type', response.headers.get('content-type'));
-    res.setHeader('Content-Length', response.headers.get('content-length'));
-
-    // Pipe the stream to client
-    response.body.pipe(res);
-
-  } catch (err) {
-    console.error('Error in /stream:', err);
-    res.status(500).send('Failed to stream video');
   }
 });
 
