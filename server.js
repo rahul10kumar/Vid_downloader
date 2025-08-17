@@ -19,8 +19,10 @@ app.post('/getVideo', async (req, res) => {
       dumpSingleJson: true,
       noWarnings: true,
       noCheckCertificates: true,
-      youtubeSkipDashManifest: true
+      youtubeSkipDashManifest: true,
+      referer: 'https://www.youtube.com/'
     });
+
 
     if (!info || !info.formats) {
       return res.status(500).json({ error: 'Could not fetch video info' });
@@ -31,7 +33,7 @@ app.post('/getVideo', async (req, res) => {
       format_id: f.format_id,
       quality: f.format_note || f.format,
       ext: f.ext,
-      size: f.filesize ? (f.filesize / (1024*1024)).toFixed(2) + ' MB' : 'Unknown'
+      size: f.filesize ? (f.filesize / (1024 * 1024)).toFixed(2) + ' MB' : 'Unknown'
     }));
 
     res.json({
