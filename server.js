@@ -3,18 +3,16 @@ const youtubedl = require('youtube-dl-exec');
 const cors = require('cors');
 
 const app = express();
+app.use(cors()); // allow cross-origin requests
 app.use(express.json());
-app.use(cors()); // Allow all origins
 
 const PORT = process.env.PORT || 10000;
 
-// Get video info
 app.post('/getVideo', async (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'No URL provided' });
 
   try {
-    // Fetch info in JSON format
     const info = await youtubedl(url, {
       dumpSingleJson: true,
       noWarnings: true,
@@ -23,43 +21,45 @@ app.post('/getVideo', async (req, res) => {
       referer: 'https://www.youtube.com/'
     });
 
-
     if (!info || !info.formats) {
-      return res.status(500).json({ error: 'Could not fetch video info' });
+      return res.status(500).json({ error: 'Could not fetch video info. Possibly restricted video or YouTube blocking access.' });
     }
 
-    // Map formats to send to frontend
-    const formats = info.formats.map(f => ({
-      format_id: f.format_id,
-      quality: f.format_note || f.format,
-      ext: f.ext,
-      size: f.filesize ? (f.filesize / (1024 * 1024)).toFixed(2) + ' MB' : 'Unknown'
-    }));
+    const videoFormats = info.formats
+      .filter(f => f.acodec !== 'none' && f.vcodec !== 'none')
+      .map(f => ({
+        itag: f.format_id,
+        quality: f.format_note || f.quality,
+        container: f.ext,
+        size: f.filesize ? (f.filesize / (1024 * 1024)).toFixed(2) + ' MB' : 'Unknown'
+      }));
 
     res.json({
       title: info.title,
-      author: info.uploader || 'Unknown',
-      formats
+      author: info.uploader,
+      formats: videoFormats
     });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
+    console.error('Error fetching video info:', err.message);
+    res.status(500).json({ error: 'Could not fetch video info. ' + err.message });
   }
 });
 
-// Download endpoint
 app.get('/download', (req, res) => {
-  const { url, format } = req.query;
-  if (!url || !format) return res.status(400).send('Missing parameters');
+  const { url, itag } = req.query;
+  if (!url || !itag) return res.status(400).send('Missing url or itag');
 
-  res.header('Content-Disposition', 'attachment; filename="video.mp4"');
-
-  youtubedl(url, {
-    format: format
-  }).pipe(res);
+  try {
+    res.header('Content-Disposition', 'attachment; filename="video.mp4"');
+    youtubedl(url, {
+      format: itag,
+      noWarnings: true,
+      noCheckCertificates: true
+    }).pipe(res);
+  } catch (err) {
+    res.status(500).send('Download failed: ' + err.message);
+  }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
