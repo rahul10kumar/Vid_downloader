@@ -19,8 +19,10 @@ app.post('/getVideo', async (req, res) => {
       noCheckCertificates: true,
       noWarnings: true,
       preferFreeFormats: true,
-      youtubeSkipDashManifest: true
+      youtubeSkipDashManifest: true,
+      verbose: true,   // <-- add this
     });
+    console.log(info);
 
     res.json({
       title: info.title,
