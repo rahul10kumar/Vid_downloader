@@ -1,43 +1,50 @@
-const { exec } = require("child_process");
-const path = require("path");
-const fs = require("fs");
+const express = require('express');
+const ytdl = require('ytdl-core');
+const path = require('path');
+const fs = require('fs');
 
-// Paths to binaries
-const ytDlpPath = path.join(__dirname, "yt-dlp");
-const ffmpegPath = path.join(__dirname, "ffmpeg");
-const cookiesPath = path.join(__dirname, "cookies.txt"); // must match uploaded file
-
-
-// Output folder
-const downloadDir = path.join(__dirname, "downloads");
-if (!fs.existsSync(downloadDir)) {
-  fs.mkdirSync(downloadDir);
-}
-
-// URL to download
-const url = "https://www.youtube.com/watch?v=zrtQb4IIY6Y";
-const outputPath = path.join(downloadDir, "%(title)s.%(ext)s");
-
-// yt-dlp command
-const command = `"${ytDlpPath}" --cookies "${cookiesPath}" -f "bv*+ba/best" --merge-output-format mp4 --ffmpeg-location "${ffmpegPath}" -o "${outputPath}" "${url}"`;
-
-console.log("📥 Downloading:", url);
-
-exec(command, (error, stdout, stderr) => {
-  if (error) {
-    console.error("❌ Error:", stderr);
-    return;
-  }
-  console.log(stdout);
-  console.log("✅ Download finished! Check downloads folder.");
-});
-
-// Start Express server (optional, if you want a frontend)
-const express = require("express");
 const app = express();
+app.use(express.json());
+app.use(express.static('public'));
+
 const PORT = process.env.PORT || 10000;
 
-app.use("/downloads", express.static(downloadDir));
+// Endpoint to get video info
+app.post('/getVideo', async (req, res) => {
+  const { url } = req.body;
+  if (!ytdl.validateURL(url)) {
+    return res.status(400).json({ error: 'Invalid YouTube URL' });
+  }
+
+  try {
+    const info = await ytdl.getInfo(url);
+    const formats = ytdl.filterFormats(info.formats, 'audioandvideo');
+
+    const videoFormats = formats.map(f => ({
+      itag: f.itag,
+      quality: f.qualityLabel,
+      container: f.container,
+      size: f.contentLength ? (f.contentLength / (1024*1024)).toFixed(2)+' MB' : 'Unknown',
+    }));
+
+    res.json({
+      title: info.videoDetails.title,
+      author: info.videoDetails.author.name,
+      formats: videoFormats
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint to download video
+app.get('/download', async (req, res) => {
+  const { url, itag } = req.query;
+  if (!ytdl.validateURL(url)) return res.status(400).send('Invalid URL');
+
+  res.header('Content-Disposition', 'attachment; filename="video.mp4"');
+  ytdl(url, { quality: itag }).pipe(res);
+});
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
