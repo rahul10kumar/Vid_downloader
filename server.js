@@ -1,6 +1,7 @@
 const express = require('express');
-const fetch = require('node-fetch'); // use node 18+ built-in fetch if available
 const cors = require('cors');
+const { exec } = require('child_process');
+const path = require('path');
 
 const app = express();
 app.use(cors());
@@ -8,33 +9,54 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
 
-// Example endpoint
-app.post('/getVideo', async (req, res) => {
+// Get video info
+app.post('/getVideo', (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'No URL provided' });
 
-  try {
-    // Here, you would normally call yt-dlp or a third-party API to get the real download URL
-    // Example: Using RapidAPI just to get the direct link
-    const apiRes = await fetch(`https://youtube-mp36.p.rapidapi.com/dl?id=${encodeURIComponent(url)}`, {
-      headers: {
-        'X-RapidAPI-Key': 'YOUR_API_KEY',
-        'X-RapidAPI-Host': 'youtube-mp36.p.rapidapi.com'
-      }
-    });
+  // Run yt-dlp to get JSON info
+  const command = `yt-dlp -j "${url}" --no-check-certificate --no-warnings --youtube-skip-dash-manifest`;
 
-    const data = await apiRes.json();
-    if (!data.link) return res.status(500).json({ error: 'Could not get download link' });
+  exec(command, (err, stdout, stderr) => {
+    if (err) {
+      console.error('yt-dlp error:', stderr || err.message);
+      return res.status(500).json({ error: 'Could not fetch video info' });
+    }
 
-    res.json({
-      title: data.title,
-      link: data.link
-    });
+    try {
+      const info = JSON.parse(stdout);
+      const formats = info.formats
+        .filter(f => f.filesize || f.filesize_approx)
+        .map(f => ({
+          itag: f.format_id,
+          ext: f.ext,
+          quality: f.format_note || f.quality,
+          size: f.filesize ? (f.filesize / (1024*1024)).toFixed(2)+' MB' : (f.filesize_approx ? (f.filesize_approx / (1024*1024)).toFixed(2)+' MB' : 'Unknown')
+        }));
 
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to fetch video info' });
-  }
+      res.json({
+        title: info.title,
+        author: info.uploader,
+        formats
+      });
+    } catch (parseErr) {
+      console.error('JSON parse error:', parseErr.message);
+      res.status(500).json({ error: 'Failed to parse video info' });
+    }
+  });
+});
+
+// Stream video
+app.get('/download', (req, res) => {
+  const { url, itag } = req.query;
+  if (!url) return res.status(400).send('No URL provided');
+
+  res.header('Content-Disposition', 'attachment; filename="video.mp4"');
+
+  const command = `yt-dlp -f ${itag || 'best'} -o - "${url}" --no-check-certificate --no-warnings`;
+  const child = exec(command, { maxBuffer: 1024 * 1024 * 1024 }); // 1GB buffer
+  child.stdout.pipe(res);
+  child.stderr.on('data', d => console.error(d.toString()));
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

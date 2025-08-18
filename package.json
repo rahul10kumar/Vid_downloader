@@ -1,26 +1,16 @@
 {
   "name": "yt-downloader",
   "version": "1.0.0",
-  "description": "YouTube video downloader with streaming support",
+  "description": "YouTube downloader using yt-dlp",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-  "express": "^4.18.2",
-  "cors": "^2.8.5",
-  "node-fetch": "^3.3.2"
-}
-,
-  "engines": {
-    "node": "22.x"
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
   },
-  "keywords": [
-    "youtube",
-    "video",
-    "downloader",
-    "stream"
-  ],
-  "author": "Your Name",
-  "license": "MIT"
+  "engines": {
+    "node": "18.x"
+  }
 }
